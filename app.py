@@ -3,9 +3,6 @@ import json, requests
 
 app = Flask(__name__)
 
-# -------------------------------------------------------------------------
-# Load players from local JSON
-# -------------------------------------------------------------------------
 def load_local_players():
     try:
         with open("players.json", "r") as f:
@@ -16,9 +13,6 @@ def load_local_players():
         print(f"[ERROR] Could not load players.json: {e}")
         return {}
 
-# -------------------------------------------------------------------------
-# Fetch player stats
-# -------------------------------------------------------------------------
 def get_player_stats(player_ids):
     stats = []
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -46,9 +40,6 @@ def get_player_stats(player_ids):
 
     return stats
 
-# -------------------------------------------------------------------------
-# Routes
-# -------------------------------------------------------------------------
 @app.route("/")
 def index():
     players = load_local_players()
@@ -60,8 +51,5 @@ def live_stats():
     data = get_player_stats(ids)
     return jsonify(data)
 
-# -------------------------------------------------------------------------
-# Gunicorn entry point
-# -------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
