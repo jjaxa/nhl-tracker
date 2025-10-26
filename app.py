@@ -19,17 +19,27 @@ def get_all_skaters():
                       "Chrome/122.0.0.0 Safari/537.36"
     }
 
+    # use a reliable proxy mirror that fetches JSON safely
+    proxy_url = (
+        "https://api.codetabs.com/v1/proxy?quest="
+        "https://api.nhle.com/stats/rest/en/skater/summary"
+    )
+
     params = {
         "isAggregate": "false",
         "isGame": "false",
-        "sort": '[{"property":"points","direction":"DESC"}]',
+        "sort": '[{\"property\":\"points\",\"direction\":\"DESC\"}]',
         "start": 0,
         "limit": 5000,
         "factCayenneExp": "gameTypeId=2"
     }
 
     try:
-        resp = requests.get(PLAYER_API, params=params, headers=headers, timeout=20)
+        resp = requests.get(proxy_url, params=params, headers=headers, timeout=25)
+        text = resp.text.strip()
+        if not text or not text.startswith("{"):
+            print("[WARN] Empty or invalid response from proxy.")
+            return {}
         data = resp.json()
         for row in data.get("data", []):
             name = f"{row['playerFirstName']} {row['playerLastName']}"
@@ -39,6 +49,7 @@ def get_all_skaters():
         print(f"[ERROR] Could not fetch player list: {e}")
 
     return dict(sorted(players.items()))
+
 
 # -------------------------------------------------------------------------
 # Fetch live stats for selected players
