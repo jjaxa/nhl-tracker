@@ -1,95 +1,79 @@
 from flask import Flask, render_template, request, jsonify
 import requests
-from datetime import datetime
 
 app = Flask(__name__)
 
-NHL_API_BASE = "https://statsapi.web.nhl.com/api/v1"
+# Modern NHL Stats API endpoint (stable, public)
+PLAYER_API = "https://api.nhle.com/stats/rest/en/skater/summary"
+PLAYER_DETAIL = "https://api.nhle.com/stats/rest/en/skater/{}"
 
-def get_all_players():
+# -------------------------------------------------------------------------
+# Fetch all current skaters
+# -------------------------------------------------------------------------
+def get_all_skaters():
+    print("[INFO] Fetching player list from NHL API...")
     players = {}
-    urls = [
-        "https://statsapi.web.nhl.com/api/v1/teams",
-        "https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams",
-        "https://thingproxy.freeboard.io/fetch/https://statsapi.web.nhl.com/api/v1/teams"
-    ]
 
-    for base in urls:
+    # We’ll get all skaters from the 2024-25 regular season
+    params = {
+        "isAggregate": "false",
+        "isGame": "false",
+        "sort": "[{\"property\":\"points\",\"direction\":\"DESC\"}]",
+        "start": 0,
+        "limit": 5000,
+        "factCayenneExp": "gameTypeId=2"  # regular season
+    }
+
+    try:
+        data = requests.get(PLAYER_API, params=params, timeout=20).json()
+        for row in data.get("data", []):
+            name = f"{row['playerFirstName']} {row['playerLastName']}"
+            players[name] = row["playerId"]
+        print(f"[INFO] Loaded {len(players)} skaters.")
+    except Exception as e:
+        print(f"[ERROR] Could not fetch player list: {e}")
+
+    return dict(sorted(players.items()))
+
+# -------------------------------------------------------------------------
+# Fetch live stats for selected players
+# -------------------------------------------------------------------------
+def get_player_stats(player_ids):
+    stats = []
+    for pid in player_ids:
         try:
-            print(f"[INFO] Trying player list via {base}")
-            teams = requests.get(base, timeout=15).json().get("teams", [])
-            if not teams:
+            url = f"https://api.nhle.com/stats/rest/en/skater/summary?cayenneExp=playerId={pid}"
+            data = requests.get(url, timeout=10).json().get("data", [])
+            if not data:
                 continue
-
-            for team in teams:
-                tid = team.get("id")
-                if not tid:
-                    continue
-
-                roster_urls = [
-                    f"https://statsapi.web.nhl.com/api/v1/teams/{tid}/roster",
-                    f"https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams/{tid}/roster",
-                    f"https://thingproxy.freeboard.io/fetch/https://statsapi.web.nhl.com/api/v1/teams/{tid}/roster"
-                ]
-
-                for roster_url in roster_urls:
-                    try:
-                        roster = requests.get(roster_url, timeout=15).json().get("roster", [])
-                        for p in roster:
-                            players[p["person"]["fullName"]] = p["person"]["id"]
-                        break
-                    except Exception:
-                        continue
-            if players:
-                print(f"[INFO] Loaded {len(players)} players successfully.")
-                return dict(sorted(players.items()))
+            p = data[0]
+            stats.append({
+                "name": f"{p['playerFirstName']} {p['playerLastName']}",
+                "goals": p.get("goals", 0),
+                "assists": p.get("assists", 0),
+                "points": p.get("points", 0),
+                "shots": p.get("shots", 0),
+                "gamesPlayed": p.get("gamesPlayed", 0),
+                "team": p.get("teamAbbrevs", "")
+            })
         except Exception as e:
-            print(f"[WARN] {base} failed: {e}")
+            print(f"[WARN] Failed for player {pid}: {e}")
+    return stats
 
-    print("[ERROR] All player source attempts failed.")
-    return {}
-
-
-
+# -------------------------------------------------------------------------
+# Routes
+# -------------------------------------------------------------------------
 @app.route("/")
 def index():
-    players = get_all_players()
+    players = get_all_skaters()
+    return render_template("index.html", players=players)
 
-    if not players:
-        # if fetch failed, show a friendly message
-        return render_template(
-            "index.html",
-            players={},
-            error="Could not load players (API or proxy limit hit). Try reloading in a minute."
-        )
-    
-    return render_template("index.html", players=players, error=None)
+@app.route("/live_stats", methods=["POST"])
+def live_stats():
+    ids = request.form.getlist("player_ids[]")
+    data = get_player_stats(ids)
+    return jsonify(data)
 
-
-@app.route("/get_stats", methods=["POST"])
-def get_stats():
-    player_ids = request.form.getlist("player_ids[]")
-    today = datetime.now().strftime("%Y-%m-%d")
-    schedule = requests.get(f"{NHL_API_BASE}/schedule?date={today}").json()
-    results = []
-
-    for pid in player_ids:
-        for date in schedule.get("dates", []):
-            for game in date.get("games", []):
-                game_pk = game["gamePk"]
-                box = requests.get(f"{NHL_API_BASE}/game/{game_pk}/boxscore").json()
-                for side in ("home", "away"):
-                    for pdata in box["teams"][side]["players"].values():
-                        if str(pdata["person"]["id"]) == pid:
-                            stats = pdata.get("stats", {}).get("skaterStats", {})
-                            results.append({
-                                "name": pdata["person"]["fullName"],
-                                "shots": stats.get("shots", 0),
-                                "goals": stats.get("goals", 0),
-                                "assists": stats.get("assists", 0),
-                                "toi": stats.get("timeOnIce", "0:00")
-                            })
-    return jsonify(results)
-
+# -------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
