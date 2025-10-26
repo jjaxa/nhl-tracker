@@ -32,26 +32,44 @@ def get_live_stats(player_ids):
             r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             data = r.json()
 
+            # Player name
             name = data.get("player", {}).get("fullName", f"Player {pid}")
 
-            # Default to 0 in case data isn't available (e.g., no live game)
+            # Default stats
+            goals = 0
+            shots = 0
+            label = "Season Totals"
+
             featured = data.get("featuredStats", {})
             reg = featured.get("regularSeason", {}).get("subSeason", {})
 
+            # Pull season totals
             goals = reg.get("goals", 0)
             shots = reg.get("shots", 0)
 
+            # Check if a live game is happening
+            live = featured.get("currentTeam", {}).get("liveData", {})
+            if live:
+                label = "Live Game Stats"
+                goals = live.get("goals", goals)
+                shots = live.get("shots", shots)
+
             results[name] = {
+                "label": label,
                 "goals": goals if isinstance(goals, int) else 0,
                 "shots": shots if isinstance(shots, int) else 0
             }
 
         except Exception as e:
             print(f"[WARN] Failed to get stats for {pid}: {e}")
-            # Always show the player even if fetch fails
-            results[f"Player {pid}"] = {"goals": 0, "shots": 0}
+            results[f"Player {pid}"] = {
+                "label": "Unavailable",
+                "goals": 0,
+                "shots": 0
+            }
 
     return results
+
 
 
 # -------------------------------------------------------------------------
