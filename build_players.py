@@ -3,45 +3,51 @@ import requests
 
 OUTPUT_FILE = "players.json"
 
-def fetch_skaters():
+def fetch_all_players():
     """
-    Fetch all active NHL skaters (excluding goalies) using the public stats API.
+    Fetch all active NHL skaters (excluding goalies) by looping through each team.
     """
-    url = "https://api-web.nhle.com/v1/roster/active/20242025"  # Active player list for 2024–25
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
+    base_url = "https://api-web.nhle.com/v1/roster/"
+    team_url = "https://api-web.nhle.com/v1/standings/now"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
-        print(f"[INFO] Fetching from {url}")
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        print("[INFO] Fetching active teams...")
+        teams_data = requests.get(team_url, headers=headers, timeout=30).json()
     except Exception as e:
-        print(f"[ERROR] Could not fetch data: {e}")
+        print(f"[ERROR] Could not fetch team list: {e}")
         return {}
 
     players = {}
 
-    # Parse players from the roster data
-    for player in data.get("forwards", []) + data.get("defensemen", []):
-        name = f"{player['firstName']['default']} {player['lastName']['default']}"
-        player_id = player.get("id")
-        players[name] = player_id
+    # Loop through each team
+    for record in teams_data.get("standings", []):
+        team_abbrev = record["teamAbbrev"]["default"]
+        roster_url = f"{base_url}{team_abbrev}/20242025"
+        print(f"[INFO] Fetching roster for {team_abbrev}...")
 
-    print(f"[INFO] Loaded {len(players)} active skaters.")
-    return players
+        try:
+            r = requests.get(roster_url, headers=headers, timeout=15)
+            data = r.json()
+
+            for group in ["forwards", "defensemen"]:
+                for player in data.get(group, []):
+                    name = f"{player['firstName']['default']} {player['lastName']['default']}"
+                    players[name] = player["id"]
+        except Exception as e:
+            print(f"[WARN] Failed roster for {team_abbrev}: {e}")
+            continue
+
+    print(f"[SUCCESS] Loaded {len(players)} total skaters.")
+    return dict(sorted(players.items()))
 
 
 def save_players(players):
-    """
-    Save players to players.json
-    """
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(players, f, indent=2)
-    print(f"[SUCCESS] Saved {len(players)} skaters to {OUTPUT_FILE}")
+    print(f"[SAVED] {len(players)} players saved to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
-    skaters = fetch_skaters()
+    skaters = fetch_all_players()
     save_players(skaters)
