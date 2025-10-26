@@ -1,9 +1,10 @@
 name: Build players.json (skaters only)
 
 on:
-  workflow_dispatch:  # allows manual trigger
-  schedule:
-    - cron: "0 9 * * *"  # runs every day at 9 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,20 +16,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+        run: pip install requests
 
-      - name: Generate players.json (skaters only)
-        run: python scripts/build_players.py
+      - name: Generate players.json
+        run: python build_players.py
 
       - name: Commit and push updated players.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add players.json
-          git commit -m "Auto-update players.json [skip ci]" || echo "No changes"
+          git commit -m "Auto-update players.json (skaters only)" || echo "No changes to commit"
           git push
