@@ -117,8 +117,9 @@
             html += `
               <div class="player-card">
                 <h5>${name}</h5>
-                <p>Shots on Goal: ${stats.shots ?? "N/A"}</p>
-                <p>Goals: ${stats.goals ?? "N/A"}</p>
+                <p><strong>{{ player.label }}</strong></p>
+                <p>Shots on Goal: {{ player.shots }}</p>
+                <p>Goals: {{ player.goals }}</p>
               </div>
             `;
           }
