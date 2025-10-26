@@ -8,20 +8,47 @@ NHL_API_BASE = "https://statsapi.web.nhl.com/api/v1"
 
 def get_all_players():
     players = {}
-    try:
-        # Use a proxy service to fetch NHL API data safely
-        proxy_url = "https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams"
-        teams = requests.get(proxy_url, timeout=15).json()["teams"]
+    urls = [
+        "https://statsapi.web.nhl.com/api/v1/teams",
+        "https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams",
+        "https://thingproxy.freeboard.io/fetch/https://statsapi.web.nhl.com/api/v1/teams"
+    ]
 
-        for team in teams:
-            team_id = team["id"]
-            roster_proxy = f"https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams/{team_id}/roster"
-            roster = requests.get(roster_proxy, timeout=15).json()
-            for player in roster["roster"]:
-                players[player["person"]["fullName"]] = player["person"]["id"]
-    except Exception as e:
-        print(f"[WARN] Unable to fetch players: {e}")
-    return dict(sorted(players.items()))
+    for base in urls:
+        try:
+            print(f"[INFO] Trying player list via {base}")
+            teams = requests.get(base, timeout=15).json().get("teams", [])
+            if not teams:
+                continue
+
+            for team in teams:
+                tid = team.get("id")
+                if not tid:
+                    continue
+
+                roster_urls = [
+                    f"https://statsapi.web.nhl.com/api/v1/teams/{tid}/roster",
+                    f"https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams/{tid}/roster",
+                    f"https://thingproxy.freeboard.io/fetch/https://statsapi.web.nhl.com/api/v1/teams/{tid}/roster"
+                ]
+
+                for roster_url in roster_urls:
+                    try:
+                        roster = requests.get(roster_url, timeout=15).json().get("roster", [])
+                        for p in roster:
+                            players[p["person"]["fullName"]] = p["person"]["id"]
+                        break
+                    except Exception:
+                        continue
+            if players:
+                print(f"[INFO] Loaded {len(players)} players successfully.")
+                return dict(sorted(players.items()))
+        except Exception as e:
+            print(f"[WARN] {base} failed: {e}")
+
+    print("[ERROR] All player source attempts failed.")
+    return {}
+
 
 
 @app.route("/")
