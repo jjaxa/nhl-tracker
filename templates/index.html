@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NHL Player Tracker</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    body { font-family: Arial; background: #f8f8f8; padding: 30px; }
+    select, button { font-size: 16px; padding: 6px; margin: 4px; }
+    #playerSelect { width: 100%; height: 300px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 8px; border-bottom: 1px solid #ccc; text-align: left; }
+    .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px #ccc; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🏒 NHL Player Tracker</h2>
+    <form id="playerForm">
+      <select id="playerSelect" name="player_ids[]" multiple>
+        {% for name, pid in players.items() %}
+        <option value="{{ pid }}">{{ name }}</option>
+        {% endfor %}
+      </select><br>
+      <button type="submit">Get Live Stats</button>
+    </form>
+    <div id="stats"></div>
+  </div>
+
+  <script>
+    $("#playerForm").on("submit", function(e){
+      e.preventDefault();
+      const selected = $("#playerSelect").val();
+      if (!selected || selected.length === 0) return alert("Select at least one player.");
+
+      $("#stats").html("<p>Loading...</p>");
+      $.post("/get_stats", { "player_ids[]": selected }, function(data){
+        let html = "<table><tr><th>Player</th><th>Shots</th><th>Goals</th><th>Assists</th><th>TOI</th></tr>";
+        data.forEach(p => html += `<tr><td>${p.name}</td><td>${p.shots}</td><td>${p.goals}</td><td>${p.assists}</td><td>${p.toi}</td></tr>`);
+        html += "</table>";
+        $("#stats").html(html);
+      });
+    });
+  </script>
+</body>
+</html>
