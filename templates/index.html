@@ -1,146 +1,146 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NHL Player Tracker</title>
 
-  <!-- Bootstrap CSS -->
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
-
-  <!-- Select2 CSS -->
-  <link
-    href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
-    rel="stylesheet"
-  />
+  <!-- Select2 for searchable dropdown -->
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
   <style>
     body {
-      background: #0c1c2c;
-      color: #fff;
-      font-family: "Segoe UI", sans-serif;
-      padding: 30px;
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f8;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
     h1 {
       text-align: center;
-      margin-bottom: 30px;
+      margin-bottom: 20px;
+      color: #003366;
     }
-    .select2-container--default .select2-selection--multiple {
-      background-color: #fff;
-      color: #000;
+    .player-select {
+      width: 100%;
+      margin-bottom: 15px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #007bff;
+      color: white;
+      font-weight: bold;
+      border: none;
       border-radius: 6px;
-      padding: 5px;
-      min-height: 48px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
     }
     #results {
-      margin-top: 30px;
+      margin-top: 25px;
     }
     .player-card {
-      background: #132639;
+      border: 1px solid #ccc;
       border-radius: 10px;
-      padding: 15px;
-      margin-bottom: 10px;
-      box-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+      padding: 10px 15px;
+      margin: 10px 0;
+      background: #f8f9fa;
+      transition: background-color 0.3s;
+    }
+    .player-card:hover {
+      background-color: #e8f0ff;
+    }
+    h3 {
+      margin: 0 0 8px 0;
+      color: #002244;
+    }
+    #last-updated {
+      text-align: center;
+      font-size: 14px;
+      color: #555;
+      margin-top: 10px;
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <h1>🏒 NHL Player Tracker</h1>
 
-    <form id="tracker-form" class="mb-4">
-      <label for="player-select" class="form-label">Select players to track:</label>
-      <select
-        id="player-select"
-        name="player_ids[]"
-        class="form-select"
-        multiple="multiple"
-        style="width: 100%"
-      >
+    <form id="player-form">
+      <select class="player-select" name="player_ids[]" multiple="multiple">
         {% for name, pid in players.items() %}
-        <option value="{{ pid }}">{{ name }}</option>
+          <option value="{{ pid }}">{{ name }}</option>
         {% endfor %}
       </select>
-
-      <div class="mt-3 d-flex justify-content-center">
-        <button type="submit" class="btn btn-primary px-4">
-          Get Live Stats
-        </button>
-      </div>
+      <button type="submit">Track Selected Players</button>
     </form>
 
     <div id="results"></div>
+    <div id="last-updated"></div>
   </div>
 
-  <!-- jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- Select2 JS -->
-  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
   <script>
-    $(document).ready(function () {
-      // Initialize Select2 with search
-      $("#player-select").select2({
-        placeholder: "Search or select players...",
-        allowClear: true,
-      });
+  document.addEventListener("DOMContentLoaded", function () {
+    const refreshInterval = 30000; // 30 seconds
+    const form = document.getElementById("player-form");
+    const resultsDiv = document.getElementById("results");
+    const lastUpdatedDiv = document.getElementById("last-updated");
 
-      // Load saved players from localStorage
-      const savedPlayers = JSON.parse(localStorage.getItem("trackedPlayers")) || [];
-      if (savedPlayers.length > 0) {
-        $("#player-select").val(savedPlayers).trigger("change");
+    // Initialize Select2
+    $(".player-select").select2({
+      placeholder: "Search and select players...",
+      allowClear: true
+    });
+
+    async function fetchStats() {
+      const formData = new FormData(form);
+      const response = await fetch("/live_stats", {
+        method: "POST",
+        body: formData
+      });
+      const data = await response.json();
+
+      resultsDiv.innerHTML = "";
+      for (const [name, stats] of Object.entries(data)) {
+        const playerDiv = document.createElement("div");
+        playerDiv.classList.add("player-card");
+        playerDiv.innerHTML = `
+          <h3>${name}</h3>
+          <p><strong>${stats.label}</strong></p>
+          <p>Shots on Goal: ${stats.shots}</p>
+          <p>Goals: ${stats.goals}</p>
+        `;
+        resultsDiv.appendChild(playerDiv);
       }
 
-      // Submit form to fetch stats
-      $("#tracker-form").on("submit", function (e) {
-        e.preventDefault();
-        const selected = $("#player-select").val() || [];
+      const now = new Date();
+      lastUpdatedDiv.textContent = "🔁 Last updated: " + now.toLocaleTimeString();
+    }
 
-        // Save selected list for persistence
-        localStorage.setItem("trackedPlayers", JSON.stringify(selected));
-
-        if (selected.length === 0) {
-          $("#results").html("<p>No players selected.</p>");
-          return;
-        }
-
-        $("#results").html("<p>Loading...</p>");
-
-        $.post("/live_stats", { "player_ids[]": selected }, function (data) {
-          let html = "";
-          for (const [name, stats] of Object.entries(data)) {
-            html += `
-              <div class="player-card">
-                <h5>${name}</h5>
-                <p><strong>{{ player.label }}</strong></p>
-                <p>Shots on Goal: {{ player.shots }}</p>
-                <p>Goals: {{ player.goals }}</p>
-              </div>
-            `;
-          }
-
-          // Show players even if no active game
-          if (Object.keys(data).length === 0) {
-            html = `
-              <div class="alert alert-secondary text-center">
-                <strong>No live data</strong> — your selected players may not have games today.
-              </div>
-            `;
-          }
-
-          $("#results").html(html);
-        }).fail(function () {
-          $("#results").html(
-            "<div class='alert alert-danger'>Error fetching stats.</div>"
-          );
-        });
-      });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await fetchStats();
+      startAutoRefresh();
     });
+
+    let refreshTimer;
+    function startAutoRefresh() {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(fetchStats, refreshInterval);
+      console.log("[AutoRefresh] Stats updating every 30 seconds");
+    }
+  });
   </script>
 </body>
 </html>
