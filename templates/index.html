@@ -76,9 +76,10 @@
         playerDiv.classList.add("player-card");
         playerDiv.innerHTML = `
           <h3>${name}</h3>
-          <p><strong>${stats.label}</strong></p>
-          <p>Shots on Goal: ${stats.shots}</p>
+          <p>Games Played: ${stats.games}</p>
           <p>Goals: ${stats.goals}</p>
+          <p>Shots on Goal: ${stats.shots}</p>
+          <p>Points: ${stats.points}</p>
         `;
         resultsDiv.appendChild(playerDiv);
       }
