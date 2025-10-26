@@ -4,19 +4,18 @@ import requests
 app = Flask(__name__)
 
 # -------------------------------------------------------------------------
-# Fetch all current NHL skaters (using the reliable skater-leaders endpoint)
+# Fetch all current NHL skaters from the season leaders endpoint
 # -------------------------------------------------------------------------
 def get_all_skaters():
-    print("[INFO] Fetching player list via skater-leaders endpoint...")
+    print("[INFO] Fetching player list from NHL API (2024–25 season)...")
     players = {}
-    url = "https://api-web.nhle.com/v1/skater-stats-leaders/current?limit=-1"
+    url = "https://api-web.nhle.com/v1/skater-stats-leaders/20242025?limit=-1"
     headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         resp = requests.get(url, headers=headers, timeout=20)
         data = resp.json().get("data", [])
         for row in data:
-            # Some entries may not have player info (filter them out)
             name = row.get("skaterFullName")
             pid = row.get("playerId")
             if name and pid:
@@ -28,7 +27,7 @@ def get_all_skaters():
     return dict(sorted(players.items()))
 
 # -------------------------------------------------------------------------
-# Fetch individual skater live stats
+# Fetch individual skater stats
 # -------------------------------------------------------------------------
 def get_player_stats(player_ids):
     stats = []
@@ -40,18 +39,18 @@ def get_player_stats(player_ids):
             resp = requests.get(url, headers=headers, timeout=15)
             data = resp.json()
 
-            # Extract the latest season stats
-            stats_splits = data.get("careerTotals", {}).get("regularSeason", {}).get("subSeason", [])
-            if stats_splits:
-                latest = stats_splits[-1]
+            # Pull latest regular season stats
+            latest = data.get("careerTotals", {}).get("regularSeason", {}).get("subSeason", [])
+            if latest:
+                season = latest[-1]
                 stats.append({
-                    "name": data.get("firstName", "") + " " + data.get("lastName", ""),
+                    "name": f"{data.get('firstName', '')} {data.get('lastName', '')}",
                     "team": data.get("currentTeamAbbrev", ""),
-                    "gamesPlayed": latest.get("gamesPlayed", 0),
-                    "goals": latest.get("goals", 0),
-                    "assists": latest.get("assists", 0),
-                    "points": latest.get("points", 0),
-                    "shots": latest.get("shots", 0)
+                    "gamesPlayed": season.get("gamesPlayed", 0),
+                    "goals": season.get("goals", 0),
+                    "assists": season.get("assists", 0),
+                    "points": season.get("points", 0),
+                    "shots": season.get("shots", 0)
                 })
         except Exception as e:
             print(f"[WARN] Failed to get player stats for {pid}: {e}")
