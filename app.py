@@ -52,5 +52,6 @@ def live_stats():
     return jsonify(data)
 
 # -------------------------------------------------------------------------
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+# Render runs this app through Gunicorn (Procfile)
+# so we do not start Flask manually.
+
