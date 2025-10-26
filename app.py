@@ -14,18 +14,24 @@ def get_all_skaters():
     print("[INFO] Fetching player list from NHL API...")
     players = {}
 
-    # We’ll get all skaters from the 2024-25 regular season
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/122.0.0.0 Safari/537.36"
+    }
+
     params = {
         "isAggregate": "false",
         "isGame": "false",
-        "sort": "[{\"property\":\"points\",\"direction\":\"DESC\"}]",
+        "sort": '[{"property":"points","direction":"DESC"}]',
         "start": 0,
         "limit": 5000,
-        "factCayenneExp": "gameTypeId=2"  # regular season
+        "factCayenneExp": "gameTypeId=2"
     }
 
     try:
-        data = requests.get(PLAYER_API, params=params, timeout=20).json()
+        resp = requests.get(PLAYER_API, params=params, headers=headers, timeout=20)
+        data = resp.json()
         for row in data.get("data", []):
             name = f"{row['playerFirstName']} {row['playerLastName']}"
             players[name] = row["playerId"]
@@ -35,35 +41,6 @@ def get_all_skaters():
 
     return dict(sorted(players.items()))
 
-# -------------------------------------------------------------------------
-# Fetch live stats for selected players
-# -------------------------------------------------------------------------
-def get_player_stats(player_ids):
-    stats = []
-    for pid in player_ids:
-        try:
-            url = f"https://api.nhle.com/stats/rest/en/skater/summary?cayenneExp=playerId={pid}"
-            data = requests.get(url, timeout=10).json().get("data", [])
-            if not data:
-                continue
-            p = data[0]
-            stats.append({
-                "name": f"{p['playerFirstName']} {p['playerLastName']}",
-                "goals": p.get("goals", 0),
-                "assists": p.get("assists", 0),
-                "points": p.get("points", 0),
-                "shots": p.get("shots", 0),
-                "gamesPlayed": p.get("gamesPlayed", 0),
-                "team": p.get("teamAbbrevs", "")
-            })
-        except Exception as e:
-            print(f"[WARN] Failed for player {pid}: {e}")
-    return stats
-
-# -------------------------------------------------------------------------
-# Routes
-# -------------------------------------------------------------------------
-@app.route("/")
 def index():
     players = get_all_skaters()
     return render_template("index.html", players=players)
