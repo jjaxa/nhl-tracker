@@ -4,30 +4,45 @@ import requests
 app = Flask(__name__)
 
 # -------------------------------------------------------------------------
-# Fetch all current NHL skaters from the season leaders endpoint
+# Reliable NHL Skater Fetcher with Proxy Fallback
 # -------------------------------------------------------------------------
 def get_all_skaters():
-    print("[INFO] Fetching player list from NHL API (2024–25 season)...")
+    print("[INFO] Fetching player list from NHL API (with fallback)...")
     players = {}
-    url = "https://api-web.nhle.com/v1/skater-stats-leaders/20242025?limit=-1"
+    url_main = "https://api-web.nhle.com/v1/skater-stats-leaders/20242025?limit=-1"
+    proxy_url = f"https://api.allorigins.win/raw?url={url_main}"
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    try:
-        resp = requests.get(url, headers=headers, timeout=20)
-        data = resp.json().get("data", [])
-        for row in data:
-            name = row.get("skaterFullName")
-            pid = row.get("playerId")
-            if name and pid:
-                players[name] = pid
-        print(f"[INFO] Loaded {len(players)} skaters.")
-    except Exception as e:
-        print(f"[ERROR] Could not fetch skater list: {e}")
+    for source in [url_main, proxy_url]:
+        try:
+            print(f"[TRY] {source}")
+            resp = requests.get(source, headers=headers, timeout=20)
+            if resp.status_code != 200 or not resp.text.strip():
+                print(f"[WARN] Empty response from {source}")
+                continue
 
-    return dict(sorted(players.items()))
+            data = resp.json().get("data", [])
+            if not data:
+                print(f"[WARN] No valid 'data' field from {source}")
+                continue
+
+            for row in data:
+                name = row.get("skaterFullName")
+                pid = row.get("playerId")
+                if name and pid:
+                    players[name] = pid
+
+            if players:
+                print(f"[INFO] Loaded {len(players)} skaters.")
+                return dict(sorted(players.items()))
+        except Exception as e:
+            print(f"[ERROR] Failed with {source}: {e}")
+
+    print("[ERROR] Could not fetch skater list from any source.")
+    return players
 
 # -------------------------------------------------------------------------
-# Fetch individual skater stats
+# Fetch player stats (summary view)
 # -------------------------------------------------------------------------
 def get_player_stats(player_ids):
     stats = []
@@ -39,7 +54,7 @@ def get_player_stats(player_ids):
             resp = requests.get(url, headers=headers, timeout=15)
             data = resp.json()
 
-            # Pull latest regular season stats
+            # Latest season stats
             latest = data.get("careerTotals", {}).get("regularSeason", {}).get("subSeason", [])
             if latest:
                 season = latest[-1]
@@ -53,7 +68,7 @@ def get_player_stats(player_ids):
                     "shots": season.get("shots", 0)
                 })
         except Exception as e:
-            print(f"[WARN] Failed to get player stats for {pid}: {e}")
+            print(f"[WARN] Failed to fetch stats for {pid}: {e}")
 
     return stats
 
@@ -72,7 +87,7 @@ def live_stats():
     return jsonify(data)
 
 # -------------------------------------------------------------------------
-# Gunicorn entry point
+# Gunicorn entry point (Render)
 # -------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
