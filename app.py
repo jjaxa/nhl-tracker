@@ -82,8 +82,32 @@ def index():
 @app.route("/live_stats", methods=["POST"])
 def live_stats():
     ids = request.form.getlist("player_ids[]")
-    stats = get_live_stats(ids)
-    return jsonify(stats)
+    results = {}
+
+    for pid in ids:
+        try:
+            # Fetch player info (name + current stats)
+            info_url = f"https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&factCayenneExp=playerId={pid}"
+            info = requests.get(info_url, timeout=10).json()
+
+            if "data" in info and len(info["data"]) > 0:
+                player = info["data"][0]
+                name = f"{player['playerFirstName']} {player['playerLastName']}"
+                stats = {
+                    "label": "Season Stats",
+                    "shots": player.get("shots", 0),
+                    "goals": player.get("goals", 0)
+                }
+                results[name] = stats
+            else:
+                results[f"Player {pid}"] = {"label": "No Data", "shots": 0, "goals": 0}
+
+        except Exception as e:
+            print(f"[ERROR] Fetching stats for player {pid}: {e}")
+            results[f"Player {pid}"] = {"label": "Error", "shots": 0, "goals": 0}
+
+    return jsonify(results)
+
 
 # -------------------------------------------------------------------------
 # Flask entrypoint (Render uses gunicorn, so no app.run() here)
