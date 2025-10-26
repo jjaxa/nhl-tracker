@@ -25,8 +25,11 @@ def get_season_stats(pid):
         r = requests.get(url, timeout=10)
         data = r.json()
 
-        first = data.get("firstName", "")
-        last = data.get("lastName", "")
+        # Handle both string and {"default": "..."} name formats
+        first_raw = data.get("firstName", "")
+        last_raw = data.get("lastName", "")
+        first = first_raw["default"] if isinstance(first_raw, dict) else first_raw
+        last = last_raw["default"] if isinstance(last_raw, dict) else last_raw
         name = f"{first} {last}".strip()
 
         stats = data.get("featuredStats", {}).get("regularSeason", {}).get("subSeason", {})
@@ -61,15 +64,17 @@ def get_live_stats(pid):
         r = requests.get(url, timeout=10)
         data = r.json()
 
-        first = data.get("firstName", "")
-        last = data.get("lastName", "")
+        first_raw = data.get("firstName", "")
+        last_raw = data.get("lastName", "")
+        first = first_raw["default"] if isinstance(first_raw, dict) else first_raw
+        last = last_raw["default"] if isinstance(last_raw, dict) else last_raw
         name = f"{first} {last}".strip()
 
-        # Look for today's game
+        # Look for today's game (if it exists)
         game_log = data.get("gameLog", [])
         if game_log and "goals" in game_log[0]:
             latest = game_log[0]
-            if latest.get("isCurrentGame", False):  # flag for live
+            if latest.get("isCurrentGame", False):
                 goals = latest.get("goals", 0)
                 assists = latest.get("assists", 0)
                 shots = latest.get("shots", 0)
@@ -84,7 +89,7 @@ def get_live_stats(pid):
                     "live": True
                 }
 
-        return None  # no live game
+        return None
     except Exception as e:
         print(f"[WARN] No live data for {pid}: {e}")
         return None
