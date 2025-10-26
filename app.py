@@ -1,95 +1,61 @@
 from flask import Flask, render_template, request, jsonify
-import requests, json
+import requests
 
 app = Flask(__name__)
 
-# Primary & proxy URLs
-PLAYER_API_MAIN = "https://api.nhle.com/stats/rest/en/skater/summary"
-PROXIES = [
-    "https://api.codetabs.com/v1/proxy?quest=",
-    "https://thingproxy.freeboard.io/fetch/",
-    "https://api.allorigins.win/raw?url="
-]
-
 # -------------------------------------------------------------------------
-# Fetch all current skaters
+# Fetch all current NHL skaters (using the reliable skater-leaders endpoint)
 # -------------------------------------------------------------------------
 def get_all_skaters():
-    print("[INFO] Fetching player list from NHL API...")
+    print("[INFO] Fetching player list via skater-leaders endpoint...")
     players = {}
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/122.0.0.0 Safari/537.36"
-    }
+    url = "https://api-web.nhle.com/v1/skater-stats-leaders/current?limit=-1"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-    params = {
-        "isAggregate": "false",
-        "isGame": "false",
-        "sort": '[{"property":"points","direction":"DESC"}]',
-        "start": 0,
-        "limit": 5000,
-        "factCayenneExp": "gameTypeId=2"
-    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=20)
+        data = resp.json().get("data", [])
+        for row in data:
+            # Some entries may not have player info (filter them out)
+            name = row.get("skaterFullName")
+            pid = row.get("playerId")
+            if name and pid:
+                players[name] = pid
+        print(f"[INFO] Loaded {len(players)} skaters.")
+    except Exception as e:
+        print(f"[ERROR] Could not fetch skater list: {e}")
 
-    urls = [PLAYER_API_MAIN] + [p + PLAYER_API_MAIN for p in PROXIES]
-
-    for url in urls:
-        try:
-            print(f"[TRY] {url}")
-            resp = requests.get(url, params=params, headers=headers, timeout=25)
-            text = resp.text.strip()
-            if not text or not text.startswith("{"):
-                print(f"[WARN] Invalid response from {url[:50]}...")
-                continue
-            data = resp.json()
-            for row in data.get("data", []):
-                name = f"{row['playerFirstName']} {row['playerLastName']}"
-                players[name] = row["playerId"]
-            if players:
-                print(f"[INFO] Loaded {len(players)} skaters.")
-                return dict(sorted(players.items()))
-        except Exception as e:
-            print(f"[ERROR] {url} failed: {e}")
-
-    print("[ERROR] Could not fetch any player list from all sources.")
-    return {}
+    return dict(sorted(players.items()))
 
 # -------------------------------------------------------------------------
-# Fetch live stats for selected players
+# Fetch individual skater live stats
 # -------------------------------------------------------------------------
 def get_player_stats(player_ids):
     stats = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/122.0.0.0 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     for pid in player_ids:
-        urls = [f"{PLAYER_API_MAIN}?cayenneExp=playerId={pid}"] + \
-               [f"{p}{PLAYER_API_MAIN}?cayenneExp=playerId={pid}" for p in PROXIES]
-        for url in urls:
-            try:
-                resp = requests.get(url, headers=headers, timeout=15)
-                if not resp.text.startswith("{"):
-                    continue
-                data = resp.json().get("data", [])
-                if not data:
-                    continue
-                p = data[0]
+        try:
+            url = f"https://api-web.nhle.com/v1/player/{pid}/landing"
+            resp = requests.get(url, headers=headers, timeout=15)
+            data = resp.json()
+
+            # Extract the latest season stats
+            stats_splits = data.get("careerTotals", {}).get("regularSeason", {}).get("subSeason", [])
+            if stats_splits:
+                latest = stats_splits[-1]
                 stats.append({
-                    "name": f"{p['playerFirstName']} {p['playerLastName']}",
-                    "team": p.get("teamAbbrevs", ""),
-                    "gamesPlayed": p.get("gamesPlayed", 0),
-                    "goals": p.get("goals", 0),
-                    "assists": p.get("assists", 0),
-                    "points": p.get("points", 0),
-                    "shots": p.get("shots", 0)
+                    "name": data.get("firstName", "") + " " + data.get("lastName", ""),
+                    "team": data.get("currentTeamAbbrev", ""),
+                    "gamesPlayed": latest.get("gamesPlayed", 0),
+                    "goals": latest.get("goals", 0),
+                    "assists": latest.get("assists", 0),
+                    "points": latest.get("points", 0),
+                    "shots": latest.get("shots", 0)
                 })
-                break  # success, no need to try next proxy
-            except Exception as e:
-                print(f"[WARN] Failed for {url[:50]}: {e}")
+        except Exception as e:
+            print(f"[WARN] Failed to get player stats for {pid}: {e}")
+
     return stats
 
 # -------------------------------------------------------------------------
@@ -107,5 +73,7 @@ def live_stats():
     return jsonify(data)
 
 # -------------------------------------------------------------------------
-# Gunicorn will handle running this app
+# Gunicorn entry point
 # -------------------------------------------------------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
