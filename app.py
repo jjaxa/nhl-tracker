@@ -5,7 +5,6 @@ app = Flask(__name__)
 
 # Modern NHL Stats API endpoint (stable, public)
 PLAYER_API = "https://api.nhle.com/stats/rest/en/skater/summary"
-PLAYER_DETAIL = "https://api.nhle.com/stats/rest/en/skater/{}"
 
 # -------------------------------------------------------------------------
 # Fetch all current skaters
@@ -41,6 +40,41 @@ def get_all_skaters():
 
     return dict(sorted(players.items()))
 
+# -------------------------------------------------------------------------
+# Fetch live stats for selected players
+# -------------------------------------------------------------------------
+def get_player_stats(player_ids):
+    stats = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/122.0.0.0 Safari/537.36"
+    }
+
+    for pid in player_ids:
+        try:
+            url = f"https://api.nhle.com/stats/rest/en/skater/summary?cayenneExp=playerId={pid}"
+            data = requests.get(url, headers=headers, timeout=10).json().get("data", [])
+            if not data:
+                continue
+            p = data[0]
+            stats.append({
+                "name": f"{p['playerFirstName']} {p['playerLastName']}",
+                "team": p.get("teamAbbrevs", ""),
+                "gamesPlayed": p.get("gamesPlayed", 0),
+                "goals": p.get("goals", 0),
+                "assists": p.get("assists", 0),
+                "points": p.get("points", 0),
+                "shots": p.get("shots", 0)
+            })
+        except Exception as e:
+            print(f"[WARN] Failed for player {pid}: {e}")
+    return stats
+
+# -------------------------------------------------------------------------
+# Flask routes
+# -------------------------------------------------------------------------
+@app.route("/")
 def index():
     players = get_all_skaters()
     return render_template("index.html", players=players)
@@ -52,6 +86,5 @@ def live_stats():
     return jsonify(data)
 
 # -------------------------------------------------------------------------
-# Render runs this app through Gunicorn (Procfile)
-# so we do not start Flask manually.
-
+# Gunicorn will handle running this app (no manual app.run)
+# -------------------------------------------------------------------------
