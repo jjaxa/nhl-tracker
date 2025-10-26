@@ -8,12 +8,21 @@ NHL_API_BASE = "https://statsapi.web.nhl.com/api/v1"
 
 def get_all_players():
     players = {}
-    teams = requests.get(f"{NHL_API_BASE}/teams").json()["teams"]
-    for team in teams:
-        roster = requests.get(f"{NHL_API_BASE}/teams/{team['id']}/roster").json()
-        for player in roster["roster"]:
-            players[player["person"]["fullName"]] = player["person"]["id"]
+    try:
+        # Use a proxy service to fetch NHL API data safely
+        proxy_url = "https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams"
+        teams = requests.get(proxy_url, timeout=15).json()["teams"]
+
+        for team in teams:
+            team_id = team["id"]
+            roster_proxy = f"https://api.codetabs.com/v1/proxy?quest=https://statsapi.web.nhl.com/api/v1/teams/{team_id}/roster"
+            roster = requests.get(roster_proxy, timeout=15).json()
+            for player in roster["roster"]:
+                players[player["person"]["fullName"]] = player["person"]["id"]
+    except Exception as e:
+        print(f"[WARN] Unable to fetch players: {e}")
     return dict(sorted(players.items()))
+
 
 @app.route("/")
 def index():
