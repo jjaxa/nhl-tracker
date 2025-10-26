@@ -16,15 +16,20 @@
 <body>
   <div class="card">
     <h2>🏒 NHL Player Tracker</h2>
-    <form id="playerForm">
-      <select id="playerSelect" name="player_ids[]" multiple>
-        {% for name, pid in players.items() %}
+<form id="playerForm">
+  {% if error %}
+    <p style="color:red;">{{ error }}</p>
+  {% else %}
+    <label for="playerSelect"><b>Select players to track:</b></label><br>
+    <select id="playerSelect" name="player_ids[]" multiple size="15" style="width:100%;">
+      {% for name, pid in players.items() %}
         <option value="{{ pid }}">{{ name }}</option>
-        {% endfor %}
-      </select><br>
-      <button type="submit">Get Live Stats</button>
-    </form>
-    <div id="stats"></div>
+      {% endfor %}
+    </select><br>
+    <button type="submit">Get Live Stats</button>
+  {% endif %}
+</form>
+<div id="stats"></div>
   </div>
 
   <script>

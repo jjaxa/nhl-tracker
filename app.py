@@ -27,7 +27,17 @@ def get_all_players():
 @app.route("/")
 def index():
     players = get_all_players()
-    return render_template("index.html", players=players)
+
+    if not players:
+        # if fetch failed, show a friendly message
+        return render_template(
+            "index.html",
+            players={},
+            error="Could not load players (API or proxy limit hit). Try reloading in a minute."
+        )
+    
+    return render_template("index.html", players=players, error=None)
+
 
 @app.route("/get_stats", methods=["POST"])
 def get_stats():
