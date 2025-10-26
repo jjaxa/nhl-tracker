@@ -1,70 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>NHL Tracker</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial; margin: 40px; background-color: #fafafa; }
-        h1 { color: #003366; }
-        select { width: 100%; height: 400px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 8px; border: 1px solid #ccc; text-align: center; }
-        button { margin-top: 10px; padding: 8px 16px; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>NHL Live Player Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0d1117; color: #e6edf3; text-align: center; margin: 40px; }
+    h1 { color: #58a6ff; }
+    select { width: 400px; height: 300px; border-radius: 8px; padding: 10px; font-size: 16px; }
+    button { margin-top: 15px; padding: 10px 20px; background-color: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+    button:hover { background-color: #2ea043; }
+    table { margin: 30px auto; border-collapse: collapse; width: 70%; }
+    th, td { border: 1px solid #30363d; padding: 8px 12px; }
+    th { background-color: #161b22; color: #79c0ff; }
+    td { background-color: #21262d; }
+    #status { color: #8b949e; margin-top: 20px; }
+  </style>
 </head>
 <body>
-<h1>NHL Skater Tracker</h1>
+  <h1>🏒 NHL Live Player Tracker</h1>
+  <p>Select players to track (hold <b>Ctrl</b> or <b>Cmd</b> to pick multiple):</p>
 
-<form id="playerForm">
-  <label><b>Select players to track:</b></label><br>
-  <select id="playerSelect" name="player_ids[]" multiple>
-    {% for name, pid in players.items() %}
-      <option value="{{ pid }}">{{ name }}</option>
-    {% endfor %}
-  </select><br>
-  <button type="submit">Get Live Stats</button>
-</form>
+  <form id="tracker-form">
+    <select id="player-select" name="player_ids[]" multiple>
+      {% for name, pid in players.items() %}
+        <option value="{{ pid }}">{{ name }}</option>
+      {% endfor %}
+    </select>
+    <br>
+    <button type="submit">Track Selected Players</button>
+  </form>
 
-<table id="statsTable" style="display:none;">
-  <thead>
-    <tr>
-      <th>Player</th>
-      <th>Team</th>
-      <th>GP</th>
-      <th>G</th>
-      <th>A</th>
-      <th>PTS</th>
-      <th>SOG</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
+  <p id="status"></p>
 
-<script>
-document.getElementById("playerForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const res = await fetch("/live_stats", { method: "POST", body: form });
-  const data = await res.json();
+  <table id="results" style="display:none;">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Team</th>
+        <th>Games</th>
+        <th>Goals</th>
+        <th>Assists</th>
+        <th>Points</th>
+        <th>Shots</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-  const table = document.getElementById("statsTable");
-  const tbody = table.querySelector("tbody");
-  tbody.innerHTML = "";
-  data.forEach(p => {
-    const row = `<tr>
-      <td>${p.name}</td>
-      <td>${p.team}</td>
-      <td>${p.gamesPlayed}</td>
-      <td>${p.goals}</td>
-      <td>${p.assists}</td>
-      <td>${p.points}</td>
-      <td>${p.shots}</td>
-    </tr>`;
-    tbody.innerHTML += row;
-  });
-  table.style.display = "table";
-});
-</script>
+  <script>
+    const form = document.getElementById("tracker-form");
+    const resultsTable = document.getElementById("results");
+    const tbody = resultsTable.querySelector("tbody");
+    const status = document.getElementById("status");
 
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      status.textContent = "Fetching live stats...";
+      tbody.innerHTML = "";
+
+      try {
+        const resp = await fetch("/live_stats", { method: "POST", body: formData });
+        const data = await resp.json();
+        if (data.length === 0) {
+          status.textContent = "No data returned. Try again.";
+          resultsTable.style.display = "none";
+          return;
+        }
+
+        status.textContent = "";
+        resultsTable.style.display = "table";
+
+        for (const p of data) {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${p.name}</td>
+            <td>${p.team}</td>
+            <td>${p.gamesPlayed}</td>
+            <td>${p.goals}</td>
+            <td>${p.assists}</td>
+            <td>${p.points}</td>
+            <td>${p.shots}</td>
+          `;
+          tbody.appendChild(row);
+        }
+      } catch (err) {
+        status.textContent = "Error fetching stats.";
+        console.error(err);
+      }
+    };
+  </script>
 </body>
 </html>
