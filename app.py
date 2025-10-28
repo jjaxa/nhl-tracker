@@ -6,7 +6,7 @@ import os
 app = Flask(__name__)
 
 # -------------------------------------------------------------------------
-# Helper: Load players.json (player name → ID)
+# Load players list (prebuilt JSON from workflow)
 # -------------------------------------------------------------------------
 def load_players():
     try:
@@ -17,7 +17,7 @@ def load_players():
         return {}
 
 # -------------------------------------------------------------------------
-# Helper: Fetch player season stats
+# Helper: Get season stats for a player
 # -------------------------------------------------------------------------
 def get_season_stats(pid):
     try:
@@ -25,7 +25,6 @@ def get_season_stats(pid):
         r = requests.get(url, timeout=10)
         data = r.json()
 
-        # Handle both string and {"default": "..."} name formats
         first_raw = data.get("firstName", "")
         last_raw = data.get("lastName", "")
         first = first_raw["default"] if isinstance(first_raw, dict) else first_raw
@@ -56,12 +55,14 @@ def get_season_stats(pid):
         }
 
 # -------------------------------------------------------------------------
-# Helper: Fetch live game stats if available
+# Helper: Try fetching LIVE stats from /game-log/now endpoint
 # -------------------------------------------------------------------------
 def get_live_stats(pid):
     try:
-        url = f"https://api-web.nhle.com/v1/player/{pid}/landing"
+        url = f"https://api-web.nhle.com/v1/player/{pid}/game-log/now"
         r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            return None
         data = r.json()
 
         first_raw = data.get("firstName", "")
@@ -70,15 +71,16 @@ def get_live_stats(pid):
         last = last_raw["default"] if isinstance(last_raw, dict) else last_raw
         name = f"{first} {last}".strip()
 
-        # Look for today's game (if it exists)
+        # Live games appear in gameLog if currently in progress
         game_log = data.get("gameLog", [])
-        if game_log and "goals" in game_log[0]:
+        if game_log and isinstance(game_log, list):
             latest = game_log[0]
-            if latest.get("isCurrentGame", False):
+            if latest.get("isCurrentGame", False) or latest.get("gameState", "") == "LIVE":
                 goals = latest.get("goals", 0)
                 assists = latest.get("assists", 0)
                 shots = latest.get("shots", 0)
                 points = goals + assists
+
                 return name, {
                     "label": "LIVE Game",
                     "shots": shots,
@@ -89,22 +91,20 @@ def get_live_stats(pid):
                     "live": True
                 }
 
+        # No current game in progress
         return None
     except Exception as e:
         print(f"[WARN] No live data for {pid}: {e}")
         return None
 
 # -------------------------------------------------------------------------
-# Home route
+# Flask Routes
 # -------------------------------------------------------------------------
 @app.route("/")
 def index():
     players = load_players()
     return render_template("index.html", players=players)
 
-# -------------------------------------------------------------------------
-# Fetch live + season stats for selected players
-# -------------------------------------------------------------------------
 @app.route("/live_stats", methods=["POST"])
 def live_stats():
     ids = request.form.getlist("player_ids[]")
@@ -121,7 +121,7 @@ def live_stats():
     return jsonify(results)
 
 # -------------------------------------------------------------------------
-# Entry point (for local testing)
+# Entry Point
 # -------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
