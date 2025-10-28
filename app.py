@@ -2,11 +2,12 @@ from flask import Flask, render_template, request, jsonify
 import json
 import requests
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 
 # -------------------------------------------------------------------------
-# Load players list (prebuilt JSON from workflow)
+# Load the player ID → name mapping
 # -------------------------------------------------------------------------
 def load_players():
     try:
@@ -17,7 +18,70 @@ def load_players():
         return {}
 
 # -------------------------------------------------------------------------
-# Helper: Get season stats for a player
+# Helper: Clean player name format
+# -------------------------------------------------------------------------
+def clean_name_field(raw):
+    if isinstance(raw, dict):
+        return raw.get("default", "")
+    return raw or ""
+
+# -------------------------------------------------------------------------
+# Get today's live or in-progress NHL games
+# -------------------------------------------------------------------------
+def get_live_games():
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        url = f"https://api-web.nhle.com/v1/score/{today}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+
+        live_games = {}
+        for game in data.get("games", []):
+            if game.get("gameState") in ["LIVE", "CRIT"]:
+                live_games[game["gameId"]] = {
+                    "home": game["homeTeam"]["abbrev"],
+                    "away": game["awayTeam"]["abbrev"]
+                }
+        return live_games
+    except Exception as e:
+        print(f"[ERROR] Could not fetch live games: {e}")
+        return {}
+
+# -------------------------------------------------------------------------
+# Helper: Fetch true LIVE stats for a player
+# -------------------------------------------------------------------------
+def get_live_stats(pid):
+    try:
+        live_games = get_live_games()
+        if not live_games:
+            return None
+
+        # Search through all live boxscores to find this player
+        for game_id in live_games:
+            box_url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
+            box = requests.get(box_url, timeout=10).json()
+
+            for group in box.get("playerByGameStats", {}).values():
+                for player_id, pinfo in group.items():
+                    if str(player_id) == str(pid):
+                        name = pinfo.get("name", {}).get("default", pinfo.get("name", "Unknown"))
+                        stats = {
+                            "label": f"LIVE Game ({live_games[game_id]['away']} vs {live_games[game_id]['home']})",
+                            "shots": pinfo.get("sog", 0),
+                            "goals": pinfo.get("goals", 0),
+                            "assists": pinfo.get("assists", 0),
+                            "points": pinfo.get("goals", 0) + pinfo.get("assists", 0),
+                            "games": None,
+                            "live": True
+                        }
+                        return name, stats
+        return None
+    except Exception as e:
+        print(f"[WARN] No live data for {pid}: {e}")
+        return None
+
+# -------------------------------------------------------------------------
+# Fallback: Fetch season totals if no live data
 # -------------------------------------------------------------------------
 def get_season_stats(pid):
     try:
@@ -25,10 +89,8 @@ def get_season_stats(pid):
         r = requests.get(url, timeout=10)
         data = r.json()
 
-        first_raw = data.get("firstName", "")
-        last_raw = data.get("lastName", "")
-        first = first_raw["default"] if isinstance(first_raw, dict) else first_raw
-        last = last_raw["default"] if isinstance(last_raw, dict) else last_raw
+        first = clean_name_field(data.get("firstName", ""))
+        last = clean_name_field(data.get("lastName", ""))
         name = f"{first} {last}".strip()
 
         stats = data.get("featuredStats", {}).get("regularSeason", {}).get("subSeason", {})
@@ -55,49 +117,6 @@ def get_season_stats(pid):
         }
 
 # -------------------------------------------------------------------------
-# Helper: Try fetching LIVE stats from /game-log/now endpoint
-# -------------------------------------------------------------------------
-def get_live_stats(pid):
-    try:
-        url = f"https://api-web.nhle.com/v1/player/{pid}/game-log/now"
-        r = requests.get(url, timeout=10)
-        if r.status_code != 200:
-            return None
-        data = r.json()
-
-        first_raw = data.get("firstName", "")
-        last_raw = data.get("lastName", "")
-        first = first_raw["default"] if isinstance(first_raw, dict) else first_raw
-        last = last_raw["default"] if isinstance(last_raw, dict) else last_raw
-        name = f"{first} {last}".strip()
-
-        # Live games appear in gameLog if currently in progress
-        game_log = data.get("gameLog", [])
-        if game_log and isinstance(game_log, list):
-            latest = game_log[0]
-            if latest.get("isCurrentGame", False) or latest.get("gameState", "") == "LIVE":
-                goals = latest.get("goals", 0)
-                assists = latest.get("assists", 0)
-                shots = latest.get("shots", 0)
-                points = goals + assists
-
-                return name, {
-                    "label": "LIVE Game",
-                    "shots": shots,
-                    "goals": goals,
-                    "assists": assists,
-                    "points": points,
-                    "games": None,
-                    "live": True
-                }
-
-        # No current game in progress
-        return None
-    except Exception as e:
-        print(f"[WARN] No live data for {pid}: {e}")
-        return None
-
-# -------------------------------------------------------------------------
 # Flask Routes
 # -------------------------------------------------------------------------
 @app.route("/")
@@ -121,7 +140,7 @@ def live_stats():
     return jsonify(results)
 
 # -------------------------------------------------------------------------
-# Entry Point
+# Entry point
 # -------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
